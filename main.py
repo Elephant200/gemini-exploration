@@ -11,7 +11,7 @@ import asyncio
 
 load_dotenv()
 
-logging.basicConfig(level="WARNING")
+logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 
 search_tool = {"google_search": {}}
@@ -27,19 +27,18 @@ async def read_file(file_path: str) -> str:
         str: Content of the file.
     """
     print("Reading file...")
+    # Currently a placeholder response
     return "This is the content of the file."
 
 class GeminiChat:
-    def __init__(self, api_key: str | None = None, config: types.LiveConnectConfigOrDict | None = None, tools: types.ToolListUnion | None = None, system_instruction: str | types.Content | None = None, model: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str | None = None, config: types.LiveConnectConfigOrDict | None = None, model: str = "gemini-2.0-flash-exp"):
         """
         Initialize the GeminiChat class, which uses the Multimodal Live API with Google's gemini-2.0-flash-exp model.
 
         Args:
             api_key (str, optional): API key for the Gemini API. Defaults to None.
-            config (types.LiveConnectConfigOrDict, optional): Configuration for the chatbot. Defaults to None.
-            tools (ToolListUnion, optional): List of tools to use for the chatbot. Defaults to including the Gemini API.
+            config (types.LiveConnectConfigOrDict, optional): Configuration for the chatbot. Defaults to None. Include system instructions and tools here.
             model (str, optional): Gemini model name to use for the chatbot. Defaults to "gemini-2.0-flash-exp".
-            system_instruction (str, optional): System instruction for the chatbot. Defaults to None.
         """
         self.client = genai.Client(api_key=api_key or os.getenv("GEMINI_API_KEY"), http_options={'api_version': 'v1alpha'})
         self.model = model
@@ -54,24 +53,9 @@ class GeminiChat:
         else:
             self.config = types.LiveConnectConfig(
                 response_modalities=[types.Modality.TEXT],
+                system_instruction=types.Content(parts=[types.Part(text="You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model. You are running through the Multimodal Live API. Answer prompts concisely.")]),
+                tools=[types.Tool(google_search=types.GoogleSearch())],
             )
-
-        if self.config.system_instruction is not None and system_instruction is not None:
-            logger.warning("Overwriting system_instruction in the config.")
-
-        if system_instruction:
-            if type(system_instruction) == str:
-                self.config.system_instruction = types.Content(parts=[types.Part(text=system_instruction)])
-            elif type(system_instruction) == types.Content:
-                self.config.system_instruction = system_instruction
-            else:
-                raise ValueError("Invalid system_instruction type. Please provide a string or a Content object.")
-        
-        if self.config.tools is not None and tools is not None:
-            logger.warning("Overwriting tools in the config.")
-
-        if tools:
-            self.config.tools = tools
         
         self.session = None
 
@@ -102,7 +86,7 @@ class GeminiChat:
             responses.append(types.FunctionResponse(
                 name=function_call.name,
                 id=function_call.id,
-                response={'result':'ok'},
+                response={'result':'ok'}, # Currently a placeholder response
             ))
         
         tool_response = types.LiveClientToolResponse(
@@ -142,19 +126,20 @@ class GeminiChat:
                             await self.handle_tool_call(response.tool_call)
                             continue
 
-        
+        except asyncio.CancelledError as e:
+            print("\n\nSystem > The chat has been cancelled. Goodbye!")
+
         except KeyboardInterrupt as e:
-            print("System > Exiting the chat. Goodbye!")
+            print("\nSystem > Exiting the chat. Goodbye!")
 
         except Exception as e:
             logger.error(e)
             print(type(e))
-            print(f"System > An error occured. Please try again later.")
+            print(f"\nSystem > An error occured. Please try again later.")
+
 
 
 function_declarations = [read_file]
-
-
 
 tools = [
     {"google_search": {}}
@@ -166,5 +151,5 @@ You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model.
 You are running on VSCode through the Multimodal Live API."
 """
 
-chat = GeminiChat(system_instruction=system_instruction, tools=tools)
+chat = GeminiChat()
 asyncio.run(chat.run())
