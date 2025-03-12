@@ -6,8 +6,11 @@ from google.genai import types
 from google.genai.errors import APIError
 import asyncio
 
+from websockets import ConnectionClosedError
+
 # USE THIS LINK FOR REFERENCE:
 # https://github.com/google-gemini/cookbook/blob/main/quickstarts/Get_started_LiveAPI.py
+# 
 
 load_dotenv()
 
@@ -31,7 +34,7 @@ async def read_file(file_path: str) -> str:
     return "This is the content of the file."
 
 class GeminiChat:
-    def __init__(self, api_key: str | None = None, config: types.LiveConnectConfigOrDict | None = None, model: str = "gemini-2.0-flash-exp"):
+    def __init__(self, api_key: str | None = None, config: types.LiveConnectConfig | None = None, model: str = "gemini-2.0-flash-exp"):
         """
         Initialize the GeminiChat class, which uses the Multimodal Live API with Google's gemini-2.0-flash-exp model.
 
@@ -40,11 +43,11 @@ class GeminiChat:
             config (types.LiveConnectConfigOrDict, optional): Configuration for the chatbot. Defaults to None. Include system instructions and tools here.
             model (str, optional): Gemini model name to use for the chatbot. Defaults to "gemini-2.0-flash-exp".
         """
-        self.client = genai.Client(api_key=api_key or os.getenv("GEMINI_API_KEY"), http_options={'api_version': 'v1alpha'})
+        self.client = genai.Client(api_key=api_key or os.getenv("GOOGLE_API_KEY"), http_options={'api_version': 'v1alpha'})
         self.model = model
 
         if config:
-            self.config = (types.LiveConnectConfig)(config)
+            self.config = config
             if config.response_modalities != [types.Modality.TEXT]:
                 logger.warning("Response modalities other than TEXT are not supported.")
                 config.response_modalities = [types.Modality.TEXT]
@@ -59,19 +62,23 @@ class GeminiChat:
         
         self.session = None
 
+        self.history = [
+            types.Content(parts=[types.Part(text=system_instruction)], role="system")
+        ]
+
     async def handle_server_content(self, server_content):
         model_turn = server_content.model_turn
         if model_turn:
             for part in model_turn.parts:
                 executable_code = part.executable_code
                 if executable_code is not None:
-                    print('-------------------------------')
+                    print('--------Executable Code--------')
                     print(f'``` python\n{executable_code}\n```')
                     print('-------------------------------')
 
                 code_execution_result = part.code_execution_result
                 if code_execution_result is not None:
-                    print('-------------------------------')
+                    print('-----Code Execution Result-----')
                     print(f'```\n{code_execution_result}\n```')
                     print('-------------------------------')
 
@@ -80,25 +87,31 @@ class GeminiChat:
             logger.info(grounding_metadata.search_entry_point.rendered_content)
 
     async def handle_tool_call(self, tool_call):
+        print('--------Handle Tool Call-------')
         responses = []
         for function_call in tool_call.function_calls:
-            print(function_call)
+            print("Function Call: " + str(function_call))
             responses.append(types.FunctionResponse(
                 name=function_call.name,
                 id=function_call.id,
-                response={'result':'ok'}, # Currently a placeholder response
+                response={"output": "Elephants rule!!"}, # Currently a placeholder response
             ))
         
         tool_response = types.LiveClientToolResponse(
             function_responses=responses,
         )
 
-        logger.info('\nTool Response: ', tool_response)
+        print('Tool Response: ' + str(tool_response))
+        print('-------------------------------')
+
+
         await self.session.send(input=tool_response)
 
     async def run(self):
         try:
             async with self.client.aio.live.connect(model=self.model, config=self.config) as session:
+                self.session = session
+
                 print("Welcome to Gemini ChatBot! Type 'quit' to exit.")
 
                 while True:
@@ -109,15 +122,26 @@ class GeminiChat:
                     
                     elif query.strip() == "":
                         continue # Prevent sending empty queries
+                    
+                    self.history.append(types.Content(parts=[types.Part(text=query)], role="user"))
+    
+                    await self.session.send(input=query, end_of_turn=True)
 
-                    await session.send(input=query, end_of_turn=True)
                     print("Gemini > ", end="")
-                    async for response in session.receive():
-                        logger.info(type(response))
+                    full_response = []
+                    
+                    async for response in self.session.receive(): # type(response) = types.LiveServerMessage
+                        try:
+                            if response.server_content.model_turn is not None:
+                                    
+                                full_response.append(response.server_content.model_turn.parts[0])
+                        except:
+                            print(response)
+
                         if response.text:
                             print(response.text, end="")
                             continue
-                        
+
                         if response.server_content:
                             await self.handle_server_content(response.server_content)
                             continue
@@ -126,23 +150,27 @@ class GeminiChat:
                             await self.handle_tool_call(response.tool_call)
                             continue
 
+                    self.history.append(types.Content(parts=full_response, role="model"))
+
         except asyncio.CancelledError as e:
-            print("\n\nSystem > The chat has been cancelled. Goodbye!")
+            print("\nSystem > The chat has been cancelled. Goodbye!")
 
         except KeyboardInterrupt as e:
-            print("\nSystem > Exiting the chat. Goodbye!")
+            print("System > Exiting the chat. Goodbye!")
+
+        except ConnectionClosedError as e:
+            print("\nSystem > The session timed out.")
 
         except Exception as e:
             logger.error(e)
-            print(type(e))
-            print(f"\nSystem > An error occured. Please try again later.")
-
-
-
-function_declarations = [read_file]
+            logger.error(type(e))
+            print(f"System > An error occured. Please try again later.")
+        
+        print("System > " + str(self.history))
 
 tools = [
-    {"google_search": {}}
+    {"google_search": {}},
+    read_file
     ]
 
 system_instruction = """
@@ -151,5 +179,9 @@ You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model.
 You are running on VSCode through the Multimodal Live API."
 """
 
-chat = GeminiChat()
+config = types.LiveConnectConfig(
+    tools=tools
+)
+
+chat = GeminiChat(config=config)
 asyncio.run(chat.run())
