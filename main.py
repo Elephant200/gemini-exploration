@@ -1,12 +1,15 @@
-import os
+import asyncio
 import logging
+import os
+
 from dotenv import load_dotenv
+from websockets import ConnectionClosedError
+
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
-import asyncio
 
-from websockets import ConnectionClosedError
+import gemini_tools
 
 # USE THIS LINK FOR REFERENCE:
 # https://github.com/google-gemini/cookbook/blob/main/quickstarts/Get_started_LiveAPI.py
@@ -18,20 +21,6 @@ logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 
 search_tool = {"google_search": {}}
-
-async def read_file(file_path: str) -> str:
-    """
-    Read a file and return the content as a string.
-
-    Args:
-        file_path (str): Path to the file.
-
-    Returns:
-        str: Content of the file.
-    """
-    print("Reading file...")
-    # Currently a placeholder response
-    return "This is the content of the file."
 
 class GeminiChat:
     def __init__(self, api_key: str | None = None, config: types.LiveConnectConfig | None = None, model: str = "gemini-2.0-flash-exp"):
@@ -105,10 +94,21 @@ class GeminiChat:
         responses = []
         for function_call in tool_call.function_calls:
             print("Function Call: " + str(function_call))
+            
+            func = getattr(gemini_tools, function_call.name, None)
+            if func is not None:
+                try:
+                    result = await func(**function_call.args)
+                    response = {"output": result}
+                except Exception as e:
+                    response = {"error": str(e)}
+            else:
+                response = {"error": f"Function '{function_call.name}' not found."}
+
             responses.append(types.FunctionResponse(
                 name=function_call.name,
                 id=function_call.id,
-                response={"output": "Elephants rule!!"}, # Currently a placeholder response
+                response=response,
             ))
         
         tool_response = types.LiveClientToolResponse(
@@ -145,13 +145,13 @@ class GeminiChat:
                     full_response = []
                     
                     async for response in self.session.receive(): # type(response) = types.LiveServerMessage
-                        print(response)
+                        #print(response)
                         
                         try:
                             if response.server_content.model_turn is not None: # type(response.server_content.model_turn) = types.Content
                                 full_response.append(response.server_content.model_turn.parts[0])
                         except:
-                            print(response)
+                            print("Strange Response: " + str(response))
 
                         if response.text:
                             print(response.text, end="")
@@ -177,9 +177,14 @@ class GeminiChat:
         except ConnectionClosedError as e:
             print("\nSystem > The session timed out.")
 
-        except Exception as e:
-            logger.error(e)
+        except APIError as e:
             logger.error(type(e))
+            logger.error(e)
+            print("\nSystem > The API ran into a problem. Please try again later.")
+
+        except Exception as e:
+            logger.error(type(e))
+            logger.error(e)
             print(f"System > An error occured. Please try again later.")
         
         print("System > " + str(self.history))
@@ -187,18 +192,20 @@ class GeminiChat:
 tools = [
     {"google_search": {}},
     {"code_execution": {}},
-    read_file
+    gemini_tools.read_file,
+    gemini_tools.write_file,
     ]
 
 system_instruction = """
-You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model. 
-
-You are running on VSCode through the Multimodal Live API."
+You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model. You are running on VSCode through the Multimodal Live API. To close the chat, the user must type 'quit.' Answer prompts concisely. 
 """
 
 config = types.LiveConnectConfig(
-    tools=tools
+    tools=tools,
+    system_instruction=types.Content(parts=[types.Part(text=system_instruction)]),
+    response_modalities=["TEXT"],
 )
 
 chat = GeminiChat(config=config)
+print(gemini_tools.__dict__)
 asyncio.run(chat.run())
