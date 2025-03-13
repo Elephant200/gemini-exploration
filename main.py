@@ -40,8 +40,8 @@ class GeminiChat:
 
         Args:
             api_key (str, optional): API key for the Gemini API. Defaults to None.
-            config (types.LiveConnectConfigOrDict, optional): Configuration for the chatbot. Defaults to None. Include system instructions and tools here.
-            model (str, optional): Gemini model name to use for the chatbot. Defaults to "gemini-2.0-flash-exp".
+            config (LiveConnectConfig, optional): Configuration for the chatbot. Defaults to None. Include system instructions and tools here.
+            model (str, optional): Gemini model name to use for the chatbot. Defaults to "gemini-2.0-flash-exp". Note that "gemini-2.0-flash" is not supported.
         """
         self.client = genai.Client(api_key=api_key or os.getenv("GOOGLE_API_KEY"), http_options={'api_version': 'v1alpha'})
         self.model = model
@@ -66,14 +66,21 @@ class GeminiChat:
             types.Content(parts=[types.Part(text=system_instruction)], role="system")
         ]
 
-    async def handle_server_content(self, server_content):
+    async def handle_server_content(self, server_content: types.LiveServerContent):
+        """
+        Handle the server content received from the Multimodal Live API.
+
+        Args:
+            server_content (LiveServerContent): Server content received from the Multimodal Live API.
+        """
+
         model_turn = server_content.model_turn
         if model_turn:
             for part in model_turn.parts:
                 executable_code = part.executable_code
                 if executable_code is not None:
                     print('--------Executable Code--------')
-                    print(f'``` python\n{executable_code}\n```')
+                    print(f'``` {str(executable_code.language).lower()}\n{executable_code.code}\n```')
                     print('-------------------------------')
 
                 code_execution_result = part.code_execution_result
@@ -86,7 +93,14 @@ class GeminiChat:
         if grounding_metadata is not None:
             logger.info(grounding_metadata.search_entry_point.rendered_content)
 
-    async def handle_tool_call(self, tool_call):
+    async def handle_tool_call(self, tool_call: types.LiveServerToolCall):
+        """
+        Handle the tool call received from the Multimodal Live API.
+
+        Args:
+            tool_call (LiveServerToolCall): Tool call received from the Multimodal Live API.
+        """
+
         print('--------Handle Tool Call-------')
         responses = []
         for function_call in tool_call.function_calls:
@@ -131,9 +145,10 @@ class GeminiChat:
                     full_response = []
                     
                     async for response in self.session.receive(): # type(response) = types.LiveServerMessage
+                        print(response)
+                        
                         try:
-                            if response.server_content.model_turn is not None:
-                                    
+                            if response.server_content.model_turn is not None: # type(response.server_content.model_turn) = types.Content
                                 full_response.append(response.server_content.model_turn.parts[0])
                         except:
                             print(response)
@@ -149,6 +164,7 @@ class GeminiChat:
                         if response.tool_call:
                             await self.handle_tool_call(response.tool_call)
                             continue
+                            
 
                     self.history.append(types.Content(parts=full_response, role="model"))
 
@@ -170,6 +186,7 @@ class GeminiChat:
 
 tools = [
     {"google_search": {}},
+    {"code_execution": {}},
     read_file
     ]
 
