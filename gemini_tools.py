@@ -155,6 +155,26 @@ request_tool = types.FunctionDeclaration(
                 example="GET",
                 enum=["GET", "POST", "PUT", "DELETE"],
                 default="GET",
+            ),
+            "json": types.Schema(
+                type="object",
+                description="JSON data to send in the request body as \"json\".",
+                example={"key": "value"},
+            ),
+            "data": types.Schema(
+                type="object",
+                description="Data to send in the request body as \"data\".",
+                example={"key": "value"},
+            ),
+            "headers": types.Schema(
+                type="object",
+                description="Headers to include in the request.",
+                example={"Content-Type": "application/json"},
+            ),
+            "cookies": types.Schema(
+                type="object",
+                description="Cookies to include in the request.",
+                example={"session": "123"},
             )
         }
     )
