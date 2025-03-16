@@ -1,6 +1,10 @@
 from typing import Literal
+import asyncio
+
 import aiofiles
 import aiohttp
+
+from google.genai import types
 
 """
 Tools for the Gemini API
@@ -45,7 +49,7 @@ async def append_file(file_path: str, content: str) -> None:
     async with aiofiles.open(file_path, mode="a") as file:
         await file.write(content)
 
-async def request(url: str, method: Literal["GET", "POST", "PUT", "DELETE"] = "GET", **kwargs) -> str:
+async def request(url: str, method: Literal["GET", "POST", "PUT", "DELETE"] = "GET", **kwargs) -> dict:
     """
     Perform an HTTP request with the specified method and return the response text.
 
@@ -55,9 +59,103 @@ async def request(url: str, method: Literal["GET", "POST", "PUT", "DELETE"] = "G
         **kwargs: Additional arguments to pass to the request (e.g., headers, json, data).
 
     Returns:
-        str: The response text from the request.
+        dict: The response json from the request.
     """
     print(f"Making {method} request to URL: {url}")
-    async with aiohttp.request(method, url, **kwargs) as response:
+    async with aiohttp.request(method, url) as response:
         response.raise_for_status()
-        return await response.text()
+        return await response.json()
+
+all_tools = [read_file, write_file, append_file, request]
+
+read_file_tool = {
+    "name": "read_file",
+    "description": "Read a file and return the content as a string.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "Path to the file to read.",
+                "example": ""
+            }
+        }
+    }
+}
+
+read_file_tool = types.FunctionDeclaration(
+    name="read_file",
+    description="Read a file and return the content as a string.",
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "file_path": types.Schema(
+                type="string",
+                description="Path to the file to read. This is passed directly into the `aiofiles.open` function; thus, both relative and absolute paths are supported.",
+                example="example.txt",
+            )
+        }
+    )
+)
+
+write_file_tool = types.FunctionDeclaration(
+    name="write_file",
+    description="Write content to a file.",
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "file_path": types.Schema(
+                type="string",
+                description="Path to the file to write to. This is passed directly into the `aiofiles.open` function; thus, both relative and absolute paths are supported.",
+                example="example.txt",
+            ),
+            "content": types.Schema(
+                type="string",
+                description="String content to write to the file.",
+                example="Hello, world!",
+            )
+        }
+    )
+)
+
+append_file_tool = types.FunctionDeclaration(
+    name="append_file",
+    description="Append content to a file.",
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "file_path": types.Schema(
+                type="string",
+                description="Path to the file to append to. This is passed directly into the `aiofiles.open` function; thus, both relative and absolute paths are supported.",
+                example="example.txt",
+            ),
+            "content": types.Schema(
+                type="string",
+                description="String content to append to the file.",
+                example="Hello, world!",
+            )
+        }
+    )
+)
+
+request_tool = types.FunctionDeclaration(
+    name="request",
+    description="Perform an HTTP request with the specified method and return the response text.",
+    parameters=types.Schema(
+        type="object",
+        properties={
+            "url": types.Schema(
+                type="string",
+                description="The URL to request.",
+                example="https://example.com",
+            ),
+            "method": types.Schema(
+                type="string",
+                description="The HTTP method to use. Defaults to 'GET'.",
+                example="GET",
+                enum=["GET", "POST", "PUT", "DELETE"],
+                default="GET",
+            )
+        }
+    )
+)
