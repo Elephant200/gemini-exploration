@@ -20,7 +20,6 @@ load_dotenv()
 logging.basicConfig(level="INFO")
 logger = logging.getLogger(__name__)
 
-search_tool = {"google_search": {}}
 
 class GeminiChat:
     def __init__(self, api_key: str | None = None, config: types.LiveConnectConfig | None = None, model: str = "gemini-2.0-flash-exp"):
@@ -33,6 +32,7 @@ class GeminiChat:
             model (str, optional): Gemini model name to use for the chatbot. Defaults to "gemini-2.0-flash-exp". Note that "gemini-2.0-flash" is not supported.
         """
         self.client = genai.Client(api_key=api_key or os.getenv("GOOGLE_API_KEY"), http_options={'api_version': 'v1alpha'})
+
         self.model = model
 
         if config:
@@ -136,7 +136,7 @@ class GeminiChat:
                     
                     elif query.strip() == "":
                         continue # Prevent sending empty queries
-                    
+
                     self.history.append(types.Content(parts=[types.Part(text=query)], role="user"))
     
                     await self.session.send(input=query, end_of_turn=True)
@@ -194,6 +194,8 @@ tools = [
     {"code_execution": {}},
     gemini_tools.read_file,
     gemini_tools.write_file,
+    gemini_tools.append_file,
+    gemini_tools.request,
     ]
 
 system_instruction = """
@@ -205,7 +207,5 @@ config = types.LiveConnectConfig(
     system_instruction=types.Content(parts=[types.Part(text=system_instruction)]),
     response_modalities=["TEXT"],
 )
-
 chat = GeminiChat(config=config)
-print(gemini_tools.__dict__)
 asyncio.run(chat.run())
