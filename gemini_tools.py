@@ -49,7 +49,7 @@ async def append_file(file_path: str, content: str) -> None:
     async with aiofiles.open(file_path, mode="a") as file:
         await file.write(content)
 
-async def request(url: str, method: Literal["GET", "POST", "PUT", "DELETE"] = "GET", **kwargs) -> dict:
+async def request(url: str, method: str) -> dict:
     """
     Perform an HTTP request with the specified method and return the response text.
 
@@ -59,12 +59,18 @@ async def request(url: str, method: Literal["GET", "POST", "PUT", "DELETE"] = "G
         **kwargs: Additional arguments to pass to the request (e.g., headers, json, data).
 
     Returns:
-        dict: The response json from the request.
+        dict: The response from the request. The 'content' key holds the response text and 'status' holds the HTTP status.
     """
     print(f"Making {method} request to URL: {url}")
     async with aiohttp.request(method, url) as response:
         response.raise_for_status()
-        return await response.json()
+        content = await response.text()
+        response_dict = {"content": content, "status": response.status}
+        try:
+            response_dict["json"] = await response.json()
+        except aiohttp.ContentTypeError:
+            pass
+        return response_dict
 
 all_tools = [read_file, write_file, append_file, request]
 
@@ -154,7 +160,6 @@ request_tool = types.FunctionDeclaration(
                 description="The HTTP method to use. Defaults to 'GET'.",
                 example="GET",
                 enum=["GET", "POST", "PUT", "DELETE"],
-                default="GET",
             ),
             "json": types.Schema(
                 type="object",
@@ -179,3 +184,5 @@ request_tool = types.FunctionDeclaration(
         }
     )
 )
+
+function_declarations = [read_file_tool, write_file_tool, append_file_tool, request_tool]

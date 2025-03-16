@@ -175,6 +175,7 @@ class GeminiChat:
             print("System > Exiting the chat. Goodbye!")
 
         except ConnectionClosedError as e:
+            logger.error(e)
             print("\nSystem > The session timed out.")
 
         except APIError as e:
@@ -192,10 +193,7 @@ class GeminiChat:
 tools = [
     {"google_search": {}},
     {"code_execution": {}},
-    gemini_tools.read_file,
-    gemini_tools.write_file,
-    gemini_tools.append_file,
-    gemini_tools.request,
+    {"function_declarations": gemini_tools.function_declarations},
     ]
 
 system_instruction = """
