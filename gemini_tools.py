@@ -185,4 +185,4 @@ request_tool = types.FunctionDeclaration(
     )
 )
 
-function_declarations = [read_file_tool, write_file_tool, append_file_tool, request_tool]
+function_declarations = [read_file_tool, write_file_tool, append_file_tool]

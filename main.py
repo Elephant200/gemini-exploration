@@ -190,11 +190,12 @@ class GeminiChat:
         
         print("System > " + str(self.history))
 
+
 tools = [
-    {"google_search": {}},
-    {"code_execution": {}},
-    {"function_declarations": gemini_tools.function_declarations},
-    ]
+    types.Tool(google_search=types.GoogleSearch()),
+    types.Tool(code_execution=types.ToolCodeExecution()),
+    types.Tool(function_declarations=gemini_tools.function_declarations),
+]
 
 system_instruction = """
 You are a helpful assistant running on the Google Gemini 2.0 Flash Exp model. You are running on VSCode through the Multimodal Live API. To close the chat, the user must type 'quit.' Answer prompts concisely. 
